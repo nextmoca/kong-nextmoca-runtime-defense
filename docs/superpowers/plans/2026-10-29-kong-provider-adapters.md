@@ -39,10 +39,10 @@
 - Consumes: raw JSON strings and `request_adapter` values.
 - Produces: `registry.resolve(raw_body, configured_name) -> adapter | nil, reason`.
 
-- [ ] **Step 1: Write failing registry tests** for auto detection, explicit adapter mismatch, and ambiguous request bodies.
-- [ ] **Step 2: Run `make test`** and verify the registry import fails.
-- [ ] **Step 3: Implement adapter common helpers and the registry** with exact adapter names from the spec.
-- [ ] **Step 4: Run `make test`** and verify registry tests pass.
+- [x] **Step 1: Write failing registry tests** for auto detection, explicit adapter mismatch, and ambiguous request bodies.
+- [x] **Step 2: Run `make test`** and verify the registry import fails.
+- [x] **Step 3: Implement adapter common helpers and the registry** with exact adapter names from the spec.
+- [x] **Step 4: Run `make test`** and verify registry tests pass.
 - [ ] **Step 5: Commit** `feat: add Kong provider adapter registry`.
 
 ### Task 2: OpenAI Chat And Responses Adapters

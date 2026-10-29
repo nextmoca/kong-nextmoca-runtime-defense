@@ -2,6 +2,7 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 
 local cjson = require("cjson.safe")
 local openai = require("kong.plugins.nextmoca-runtime-defense.openai")
+local registry = require("kong.plugins.nextmoca-runtime-defense.adapters.registry")
 local breaker_module = require("kong.plugins.nextmoca-runtime-defense.breaker")
 local client = require("kong.plugins.nextmoca-runtime-defense.client")
 local policy = require("kong.plugins.nextmoca-runtime-defense.policy")
@@ -39,6 +40,30 @@ local raw_request = [[
     "tools": [{"type": "function", "function": {"name": "lookup_reservation"}}]
   }
 ]]
+
+local function resolves_the_openai_chat_shape_in_auto_mode()
+  local adapter_name, err = registry.detect(raw_request, "auto")
+
+  assert_equal(nil, err)
+  assert_equal("openai_chat", adapter_name)
+end
+
+local function refuses_an_explicit_adapter_when_the_shape_does_not_match()
+  local adapter_name, err = registry.detect(raw_request, "gemini_generate_content")
+
+  assert_equal(nil, adapter_name)
+  assert_equal("adapter_shape_mismatch", err)
+end
+
+local function refuses_ambiguous_provider_shapes()
+  local adapter_name, err = registry.detect([[{
+    "messages": [{"role": "user", "content": "What happened?"}],
+    "contents": [{"role": "user", "parts": [{"text": "What happened?"}]}]
+  }]], "auto")
+
+  assert_equal(nil, adapter_name)
+  assert_equal("ambiguous_request_shape", err)
+end
 
 local function extracts_only_eligible_earlier_messages()
   local parsed, err = openai.parse(raw_request)
@@ -187,6 +212,9 @@ local function applies_selected_excerpts_without_crossing_message_boundaries()
 end
 
 local tests = {
+  resolves_the_openai_chat_shape_in_auto_mode,
+  refuses_an_explicit_adapter_when_the_shape_does_not_match,
+  refuses_ambiguous_provider_shapes,
   extracts_only_eligible_earlier_messages,
   rewrites_excerpts_without_changing_control_or_tool_metadata,
   refuses_multimodal_content_without_partial_transformation,

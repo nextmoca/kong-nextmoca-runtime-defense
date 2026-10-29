@@ -1,0 +1,205 @@
+package.path = "./?.lua;./?/init.lua;" .. package.path
+
+local cjson = require("cjson.safe")
+local openai = require("kong.plugins.nextmoca-runtime-defense.openai")
+local breaker_module = require("kong.plugins.nextmoca-runtime-defense.breaker")
+local client = require("kong.plugins.nextmoca-runtime-defense.client")
+local policy = require("kong.plugins.nextmoca-runtime-defense.policy")
+
+local omitted = "[Next Moca omitted nonessential context for this request.]"
+
+local function assert_equal(expected, actual, message)
+  if expected ~= actual then
+    error((message or "values differ") .. ": expected " .. tostring(expected) .. ", got " .. tostring(actual), 2)
+  end
+end
+
+local function assert_true(value, message)
+  if not value then
+    error(message or "expected truthy value", 2)
+  end
+end
+
+local raw_request = [[
+  {
+    "model": "gpt-5",
+    "temperature": 0.2,
+    "messages": [
+      {"role": "system", "content": "You are a reservation assistant."},
+      {"role": "developer", "content": "Never disclose private data."},
+      {"role": "user", "content": "I previously asked about reservation H7K2."},
+      {
+        "role": "assistant",
+        "content": "I will check the reservation.",
+        "tool_calls": [{"id": "call_abc", "type": "function", "function": {"name": "lookup_reservation", "arguments": "{\\\"code\\\":\\\"H7K2\\\"}"}}]
+      },
+      {"role": "tool", "tool_call_id": "call_abc", "content": "Reservation confirmation code is H7K2. Passenger: Ada."},
+      {"role": "user", "content": "What is my reservation confirmation code?"}
+    ],
+    "tools": [{"type": "function", "function": {"name": "lookup_reservation"}}]
+  }
+]]
+
+local function extracts_only_eligible_earlier_messages()
+  local parsed, err = openai.parse(raw_request)
+
+  assert_equal(nil, err)
+  assert_true(parsed.supported)
+  assert_equal("What is my reservation confirmation code?", parsed.task_prompt)
+  assert_equal("message-3", parsed.records[1].id)
+  assert_equal("message-4", parsed.records[2].id)
+  assert_equal("message-5", parsed.records[3].id)
+  assert_equal("conversation", parsed.records[1].source_kind)
+  assert_equal("assistant", parsed.records[2].source_kind)
+  assert_equal("tool", parsed.records[3].source_kind)
+end
+
+local function rewrites_excerpts_without_changing_control_or_tool_metadata()
+  local parsed = assert(openai.parse(raw_request))
+  local rewritten_raw, err = openai.rewrite_selected(parsed, {
+    ["message-3"] = "Reservation H7K2.",
+    ["message-5"] = "Reservation confirmation code is H7K2.",
+  })
+
+  assert_equal(nil, err)
+  local rewritten = assert(cjson.decode(rewritten_raw))
+  assert_equal("You are a reservation assistant.", rewritten.messages[1].content)
+  assert_equal("Never disclose private data.", rewritten.messages[2].content)
+  assert_equal("Reservation H7K2.", rewritten.messages[3].content)
+  assert_equal(omitted, rewritten.messages[4].content)
+  assert_equal("call_abc", rewritten.messages[4].tool_calls[1].id)
+  assert_equal("lookup_reservation", rewritten.messages[4].tool_calls[1]["function"].name)
+  assert_equal("Reservation confirmation code is H7K2.", rewritten.messages[5].content)
+  assert_equal("call_abc", rewritten.messages[5].tool_call_id)
+  assert_equal("What is my reservation confirmation code?", rewritten.messages[6].content)
+  assert_equal("lookup_reservation", rewritten.tools[1]["function"].name)
+  assert_equal("gpt-5", rewritten.model)
+end
+
+local function refuses_multimodal_content_without_partial_transformation()
+  local parsed, err = openai.parse([[{
+    "messages": [
+      {"role": "user", "content": [{"type": "text", "text": "Earlier context"}]},
+      {"role": "user", "content": "What happened?"}
+    ]
+  }]])
+
+  assert_equal(nil, err)
+  assert_equal(false, parsed.supported)
+  assert_equal("content_parts_not_supported", parsed.reason)
+end
+
+local function wires_only_the_hosted_selection_contract()
+  local parsed = assert(openai.parse(raw_request))
+  local request = client.wire_request({
+    endpoint = "https://api.nextmoca.com",
+    operating_point = "np-2026-10-r7",
+    max_context_tokens = 8192,
+    capacity_tokens = 128000,
+    autochunk = true,
+    mode = "quarantine",
+  }, parsed, "request-123")
+
+  assert_equal("request-123", request.request_id)
+  assert_equal("What is my reservation confirmation code?", request.task.prompt)
+  assert_equal(8192, request.budget.max_context_tokens)
+  assert_equal(128000, request.budget.capacity_cap_tokens)
+  assert_equal("np-2026-10-r7", request.budget.operating_point)
+  assert_equal(true, request.budget.autochunk)
+  assert_equal("quarantine", request.security_mode)
+  assert_equal("message-5", request.records[3].id)
+  assert_equal("tool", request.records[3].source_kind)
+end
+
+local function rejects_mismatched_hosted_response_ids()
+  local response, err = client.decode_response(200, {}, [[{
+    "request_id": "another-request",
+    "outcome": "selected",
+    "fallback_used": false,
+    "tokens_before": 120,
+    "tokens_after": 40,
+    "tokens_saved": 80,
+    "engine_latency_ms": 12.4,
+    "rendered_context": "Reservation confirmation code is H7K2.",
+    "selected": [{"record_id": "message-5", "excerpt": "Reservation confirmation code is H7K2."}]
+  }]], "request-123")
+
+  assert_equal(nil, response)
+  assert_equal("contract", err.class)
+end
+
+local function opens_the_breaker_only_after_configured_transient_failures()
+  local now = 1000
+  local breaker = breaker_module.new(2, 50, function()
+    return now
+  end)
+
+  assert_equal(true, breaker:allow())
+  breaker:report("timeout")
+  assert_equal(true, breaker:allow())
+  breaker:report("server")
+  assert_equal(false, breaker:allow())
+  now = 1050
+  assert_equal(true, breaker:allow())
+  breaker:report(nil)
+  assert_equal(true, breaker:allow())
+end
+
+local function blocks_enforced_hosted_security_verdicts_before_upstream()
+  local parsed = assert(openai.parse(raw_request))
+  local decision = policy.decide({ mode = "enforce", on_selection_error = "pass" }, raw_request, parsed, {
+    outcome = "blocked",
+    fallback_used = false,
+  })
+
+  assert_equal("block", decision.kind)
+  assert_equal("verdict", decision.cause)
+  assert_equal("blocked_by_nextmoca", decision.reason)
+end
+
+local function never_restores_raw_context_after_unsafe_sanitized_fallback()
+  local parsed = assert(openai.parse(raw_request))
+  local decision = policy.decide({ mode = "quarantine", on_selection_error = "pass" }, raw_request, parsed, {
+    outcome = "sanitized_fallback",
+    fallback_used = true,
+    rendered_context = "Reservation confirmation code is H7K2.",
+  })
+
+  assert_equal("block", decision.kind)
+  assert_equal("sanitized_fallback_requires_record_mapping", decision.reason)
+  assert_equal(nil, decision.body)
+end
+
+local function applies_selected_excerpts_without_crossing_message_boundaries()
+  local parsed = assert(openai.parse(raw_request))
+  local decision = policy.decide({ mode = "active", on_selection_error = "pass" }, raw_request, parsed, {
+    outcome = "selected",
+    fallback_used = false,
+    selected = {{ record_id = "message-5", excerpt = "Reservation confirmation code is H7K2." }},
+  })
+
+  assert_equal("transform", decision.kind)
+  local rewritten = assert(cjson.decode(decision.body))
+  assert_equal(omitted, rewritten.messages[3].content)
+  assert_equal(omitted, rewritten.messages[4].content)
+  assert_equal("Reservation confirmation code is H7K2.", rewritten.messages[5].content)
+  assert_equal("What is my reservation confirmation code?", rewritten.messages[6].content)
+end
+
+local tests = {
+  extracts_only_eligible_earlier_messages,
+  rewrites_excerpts_without_changing_control_or_tool_metadata,
+  refuses_multimodal_content_without_partial_transformation,
+  wires_only_the_hosted_selection_contract,
+  rejects_mismatched_hosted_response_ids,
+  opens_the_breaker_only_after_configured_transient_failures,
+  blocks_enforced_hosted_security_verdicts_before_upstream,
+  never_restores_raw_context_after_unsafe_sanitized_fallback,
+  applies_selected_excerpts_without_crossing_message_boundaries,
+}
+
+for _, test in ipairs(tests) do
+  test()
+end
+
+io.stdout:write("openai adapter: " .. #tests .. " tests passed\n")

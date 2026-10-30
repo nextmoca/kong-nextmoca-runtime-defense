@@ -629,4 +629,4 @@ for _, test in ipairs(tests) do
   test()
 end
 
-io.stdout:write("openai adapter: " .. #tests .. " tests passed\n")
+io.stdout:write("provider adapter suite: " .. #tests .. " tests passed\n")

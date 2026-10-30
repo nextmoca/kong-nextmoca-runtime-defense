@@ -43,7 +43,7 @@
 - [x] **Step 2: Run `make test`** and verify the registry import fails.
 - [x] **Step 3: Implement adapter common helpers and the registry** with exact adapter names from the spec.
 - [x] **Step 4: Run `make test`** and verify registry tests pass.
-- [ ] **Step 5: Commit** `feat: add Kong provider adapter registry`.
+- [x] **Step 5: Commit** `feat: add Kong provider adapter registry`.
 
 ### Task 2: OpenAI Chat And Responses Adapters
 
@@ -60,7 +60,7 @@
 - [x] **Step 2: Run `make test`** and verify Responses tests fail.
 - [x] **Step 3: Implement adapters** retaining existing Chat behavior and preserving all non-context fields.
 - [x] **Step 4: Run `make test`** and verify both OpenAI suites pass.
-- [ ] **Step 5: Commit** `feat: support OpenAI request adapters`.
+- [x] **Step 5: Commit** `feat: support OpenAI request adapters`.
 
 ### Task 3: Anthropic Messages Adapter
 
@@ -76,7 +76,7 @@
 - [x] **Step 2: Run `make test`** and verify the Anthropic suite fails.
 - [x] **Step 3: Implement exact text-coordinate extraction and rewrite.**
 - [x] **Step 4: Run `make test`** and verify all tests pass.
-- [ ] **Step 5: Commit** `feat: support Anthropic Messages adapter`.
+- [x] **Step 5: Commit** `feat: support Anthropic Messages adapter`.
 
 ### Task 4: Gemini GenerateContent Adapter
 
@@ -92,7 +92,7 @@
 - [x] **Step 2: Run `make test`** and verify Gemini tests fail.
 - [x] **Step 3: Implement Gemini parse and rewrite behavior.**
 - [x] **Step 4: Run `make test`** and verify all tests pass.
-- [ ] **Step 5: Commit** `feat: support native Gemini request adapter`.
+- [x] **Step 5: Commit** `feat: support native Gemini request adapter`.
 
 ### Task 5: Generic Hosted Client And Delivery Policy
 
@@ -109,7 +109,7 @@
 - [x] **Step 2: Run `make test`** and verify generic policy tests fail.
 - [x] **Step 3: Remove OpenAI-specific coupling** by carrying the resolved adapter in parsed packets.
 - [x] **Step 4: Run `make test`** and verify all adapter delivery tests pass.
-- [ ] **Step 5: Commit** `refactor: make Kong delivery policy adapter-neutral`.
+- [x] **Step 5: Commit** `refactor: make Kong delivery policy adapter-neutral`.
 
 ### Task 6: Kong Plugin Handler And Schema
 
@@ -126,7 +126,7 @@
 - [x] **Step 2: Run `make test`** and verify the handler import fails.
 - [x] **Step 3: Implement `access` phase handling and schema validation**, including exact `request_adapter`, timeout, breaker, and unsupported-shape options.
 - [x] **Step 4: Run `make test`** and verify the handler tests pass.
-- [ ] **Step 5: Commit** `feat: add Kong runtime defense handler`.
+- [x] **Step 5: Commit** `feat: add Kong runtime defense handler`.
 
 ### Task 7: Package, OCI, Documentation, And Gateway Smoke Test
 
@@ -143,11 +143,11 @@
 - Consumes: plugin source and fake hosted Select endpoint fixture.
 - Produces: a minimal OCI image and reproducible tests without Next Moca core code.
 
-- [ ] **Step 1: Write a failing smoke script** that expects an upstream fixture to receive a Gemini-shaped request with unselected text omitted.
-- [ ] **Step 2: Run the smoke command** and verify it fails before packaging exists.
-- [ ] **Step 3: Add the minimal Kong image, Compose fixture, Apache license, public documentation, and GitHub Actions workflow.**
-- [ ] **Step 4: Run `make test`, `make lint`, and the container smoke test** until all pass.
-- [ ] **Step 5: Commit** `feat: package Kong runtime defense plugin`.
+- [x] **Step 1: Write a failing smoke script** that expects an upstream fixture to receive a Gemini-shaped request with unselected text omitted.
+- [x] **Step 2: Run the smoke command** and verify it fails before packaging exists.
+- [x] **Step 3: Add the minimal Kong image, Compose fixture, Apache license, public documentation, and GitHub Actions workflow.**
+- [x] **Step 4: Run `make test`, `make lint`, and the container smoke test** until all pass.
+- [x] **Step 5: Commit** `feat: package Kong runtime defense plugin`.
 
 ## Execution Handoff
 

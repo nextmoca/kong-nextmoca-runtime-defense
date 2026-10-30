@@ -1,0 +1,26 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: smoke-upstream
+    url: http://upstream:8080
+    routes:
+      - name: smoke-route
+        paths:
+          - /
+        strip_path: false
+    plugins:
+      - name: nextmoca-runtime-defense
+        config:
+          endpoint: http://selector:8080
+          operating_point: np-2026-10-r7
+          mode: active
+          request_adapter: auto
+          unsupported_shape: pass
+          on_selection_error: pass
+          max_context_tokens: 8192
+          capacity_tokens: 128000
+          autochunk: true
+          timeout_ms: 3000
+          breaker_failures: 3
+          breaker_cooldown_ms: 30000

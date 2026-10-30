@@ -1,0 +1,35 @@
+services:
+  kong:
+    build:
+      context: .
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_PLUGINS: bundled,nextmoca-runtime-defense
+      # Kong's Nginx workers inherit only explicitly exported variables.
+      KONG_NGINX_MAIN_ENV: NEXTMOCA_API_KEY
+      NEXTMOCA_API_KEY: smoke-test-key
+    ports:
+      - "18080:8000"
+    volumes:
+      - ./smoke/kong.yml:/kong/declarative/kong.yml:ro
+    depends_on:
+      selector:
+        condition: service_started
+      upstream:
+        condition: service_started
+
+  selector:
+    build:
+      context: .
+      dockerfile: smoke/Dockerfile
+    environment:
+      ROLE: selector
+
+  upstream:
+    build:
+      context: .
+      dockerfile: smoke/Dockerfile
+    environment:
+      ROLE: upstream

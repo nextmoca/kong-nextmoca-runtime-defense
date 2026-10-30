@@ -1,7 +1,8 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
 local cjson = require("cjson.safe")
-local openai = require("kong.plugins.nextmoca-runtime-defense.openai")
+local openai = require("kong.plugins.nextmoca-runtime-defense.adapters.openai_chat")
+local responses = require("kong.plugins.nextmoca-runtime-defense.adapters.openai_responses")
 local registry = require("kong.plugins.nextmoca-runtime-defense.adapters.registry")
 local breaker_module = require("kong.plugins.nextmoca-runtime-defense.breaker")
 local client = require("kong.plugins.nextmoca-runtime-defense.client")
@@ -38,6 +39,20 @@ local raw_request = [[
       {"role": "user", "content": "What is my reservation confirmation code?"}
     ],
     "tools": [{"type": "function", "function": {"name": "lookup_reservation"}}]
+  }
+]]
+
+local raw_responses_request = [[
+  {
+    "model": "gpt-5",
+    "instructions": "Use only supplied evidence.",
+    "tools": [{"type": "function", "name": "lookup_reservation"}],
+    "input": [
+      {"role": "user", "content": "I previously asked about reservation H7K2."},
+      {"type": "function_call", "call_id": "call_abc", "name": "lookup_reservation", "arguments": "{\"code\":\"H7K2\"}"},
+      {"type": "function_call_output", "call_id": "call_abc", "output": "Reservation confirmation code is H7K2. Passenger: Ada."},
+      {"role": "user", "content": "What is my reservation confirmation code?"}
+    ]
   }
 ]]
 
@@ -112,6 +127,60 @@ local function refuses_multimodal_content_without_partial_transformation()
   assert_equal(nil, err)
   assert_equal(false, parsed.supported)
   assert_equal("content_parts_not_supported", parsed.reason)
+end
+
+local function accepts_a_responses_string_input_as_the_task()
+  local parsed, err = responses.parse([[{
+    "model": "gpt-5",
+    "input": "What is my reservation confirmation code?"
+  }]])
+
+  assert_equal(nil, err)
+  assert_true(parsed.supported)
+  assert_equal("What is my reservation confirmation code?", parsed.task_prompt)
+  assert_equal(0, #parsed.records)
+end
+
+local function extracts_responses_messages_and_function_output_as_candidates()
+  local parsed, err = responses.parse(raw_responses_request)
+
+  assert_equal(nil, err)
+  assert_true(parsed.supported)
+  assert_equal("What is my reservation confirmation code?", parsed.task_prompt)
+  assert_equal("input-1", parsed.records[1].id)
+  assert_equal("conversation", parsed.records[1].source_kind)
+  assert_equal("input-3", parsed.records[2].id)
+  assert_equal("tool", parsed.records[2].source_kind)
+end
+
+local function preserves_responses_tool_metadata_when_rewriting_selected_candidates()
+  local parsed = assert(responses.parse(raw_responses_request))
+  local rewritten_raw, err = responses.rewrite_selected(parsed, {
+    ["input-3"] = "Reservation confirmation code is H7K2.",
+  })
+
+  assert_equal(nil, err)
+  local rewritten = assert(cjson.decode(rewritten_raw))
+  assert_equal(omitted, rewritten.input[1].content)
+  assert_equal("call_abc", rewritten.input[2].call_id)
+  assert_equal("lookup_reservation", rewritten.input[2].name)
+  assert_equal("Reservation confirmation code is H7K2.", rewritten.input[3].output)
+  assert_equal("What is my reservation confirmation code?", rewritten.input[4].content)
+  assert_equal("Use only supplied evidence.", rewritten.instructions)
+  assert_equal("lookup_reservation", rewritten.tools[1].name)
+end
+
+local function refuses_responses_non_text_content_without_partial_transformation()
+  local parsed, err = responses.parse([[{
+    "input": [
+      {"role": "user", "content": [{"type": "input_text", "text": "Earlier context"}]},
+      {"role": "user", "content": "What happened?"}
+    ]
+  }]])
+
+  assert_equal(nil, err)
+  assert_equal(false, parsed.supported)
+  assert_equal("content_blocks_not_supported", parsed.reason)
 end
 
 local function wires_only_the_hosted_selection_contract()
@@ -218,6 +287,10 @@ local tests = {
   extracts_only_eligible_earlier_messages,
   rewrites_excerpts_without_changing_control_or_tool_metadata,
   refuses_multimodal_content_without_partial_transformation,
+  accepts_a_responses_string_input_as_the_task,
+  extracts_responses_messages_and_function_output_as_candidates,
+  preserves_responses_tool_metadata_when_rewriting_selected_candidates,
+  refuses_responses_non_text_content_without_partial_transformation,
   wires_only_the_hosted_selection_contract,
   rejects_mismatched_hosted_response_ids,
   opens_the_breaker_only_after_configured_transient_failures,

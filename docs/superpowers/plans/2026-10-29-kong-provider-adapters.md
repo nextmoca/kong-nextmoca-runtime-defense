@@ -56,10 +56,10 @@
 - Consumes: Chat `messages` or Responses `input` bodies.
 - Produces: a parsed provider packet implementing the common adapter contract.
 
-- [ ] **Step 1: Write failing tests** for Responses string input, text-only input items, function output records, and unsupported mixed input.
-- [ ] **Step 2: Run `make test`** and verify Responses tests fail.
-- [ ] **Step 3: Implement adapters** retaining existing Chat behavior and preserving all non-context fields.
-- [ ] **Step 4: Run `make test`** and verify both OpenAI suites pass.
+- [x] **Step 1: Write failing tests** for Responses string input, text-only input items, function output records, and unsupported mixed input.
+- [x] **Step 2: Run `make test`** and verify Responses tests fail.
+- [x] **Step 3: Implement adapters** retaining existing Chat behavior and preserving all non-context fields.
+- [x] **Step 4: Run `make test`** and verify both OpenAI suites pass.
 - [ ] **Step 5: Commit** `feat: support OpenAI request adapters`.
 
 ### Task 3: Anthropic Messages Adapter

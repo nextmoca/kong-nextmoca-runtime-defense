@@ -3,7 +3,7 @@ local Common = require("kong.plugins.nextmoca-runtime-defense.adapters.common")
 local Registry = {}
 
 local known_adapters = {
-  openai_chat = "kong.plugins.nextmoca-runtime-defense.openai",
+  openai_chat = "kong.plugins.nextmoca-runtime-defense.adapters.openai_chat",
   openai_responses = "kong.plugins.nextmoca-runtime-defense.adapters.openai_responses",
   anthropic_messages = "kong.plugins.nextmoca-runtime-defense.adapters.anthropic_messages",
   gemini_generate_content = "kong.plugins.nextmoca-runtime-defense.adapters.gemini_generate_content",

@@ -9,6 +9,7 @@ local registry = require("kong.plugins.nextmoca-runtime-defense.adapters.registr
 local breaker_module = require("kong.plugins.nextmoca-runtime-defense.breaker")
 local client = require("kong.plugins.nextmoca-runtime-defense.client")
 local policy = require("kong.plugins.nextmoca-runtime-defense.policy")
+local access = require("kong.plugins.nextmoca-runtime-defense.access")
 
 local omitted = "[Next Moca omitted nonessential context for this request.]"
 
@@ -22,6 +23,63 @@ local function assert_true(value, message)
   if not value then
     error(message or "expected truthy value", 2)
   end
+end
+
+local function fake_pdk(raw_body)
+  local state = { headers = {}, logs = {} }
+  local pdk = {
+    request = {
+      get_raw_body = function()
+        return raw_body, nil
+      end,
+      get_header = function(name)
+        if name == "x-request-id" then
+          return "gateway-request-1"
+        end
+        return nil
+      end,
+      get_id = function()
+        return "kong-request-1"
+      end,
+    },
+    service = {
+      request = {
+        set_raw_body = function(body)
+          state.upstream_body = body
+        end,
+      },
+    },
+    response = {
+      exit = function(status, body)
+        state.exit_status = status
+        state.exit_body = body
+        return state
+      end,
+    },
+    log = {
+      notice = function(...)
+        state.logs[#state.logs + 1] = table.concat({...}, " ")
+      end,
+      err = function(...)
+        state.logs[#state.logs + 1] = table.concat({...}, " ")
+      end,
+    },
+    ctx = { plugin = {} },
+  }
+  return pdk, state
+end
+
+local function plugin_config(overrides)
+  local config = {
+    mode = "active",
+    request_adapter = "auto",
+    unsupported_shape = "pass",
+    on_selection_error = "pass",
+  }
+  for key, value in pairs(overrides or {}) do
+    config[key] = value
+  end
+  return config
 end
 
 local raw_request = [[
@@ -461,6 +519,79 @@ local function applies_selected_excerpts_with_the_resolved_gemini_adapter()
   assert_equal("What is my reservation confirmation code?", rewritten.contents[3].parts[1].text)
 end
 
+local function handler_rewrites_the_real_upstream_body_using_the_resolved_adapter()
+  local pdk, state = fake_pdk(raw_gemini_request)
+  local fake_client = {
+    select = function(_, _, request_id)
+      assert_equal("gateway-request-1", request_id)
+      return {
+        outcome = "selected",
+        fallback_used = false,
+        request_id = request_id,
+        tokens_before = 100,
+        tokens_after = 40,
+        tokens_saved = 60,
+        engine_latency_ms = 7.5,
+        selected = {{ record_id = "content-1-part-1", excerpt = "Reservation H7K2 is in the archive." }},
+      }, nil
+    end,
+  }
+
+  access.run(pdk, plugin_config(), fake_client)
+
+  local upstream = assert(cjson.decode(state.upstream_body))
+  assert_equal("Reservation H7K2 is in the archive.", upstream.contents[1].parts[1].text)
+  assert_equal(omitted, upstream.contents[2].parts[1].text)
+  assert_equal("gemini_generate_content", pdk.ctx.plugin.receipt.adapter)
+  assert_equal("transform", pdk.ctx.plugin.receipt.decision)
+end
+
+local function handler_blocks_hosted_security_verdicts_before_the_upstream()
+  local pdk, state = fake_pdk(raw_request)
+  local fake_client = {
+    select = function()
+      return { outcome = "blocked", fallback_used = false }, nil
+    end,
+  }
+
+  access.run(pdk, plugin_config({ mode = "enforce" }), fake_client)
+
+  assert_equal(403, state.exit_status)
+  assert_equal("context_security_blocked", state.exit_body.code)
+  assert_equal(nil, state.upstream_body)
+end
+
+local function handler_blocks_unsupported_shapes_when_security_policy_requires_it()
+  local pdk, state = fake_pdk([[{
+    "contents": [
+      {"role": "user", "parts": [{"inlineData": {"mimeType": "image/png", "data": "..."}}]},
+      {"role": "user", "parts": [{"text": "What happened?"}]}
+    ]
+  }]])
+
+  access.run(pdk, plugin_config({ mode = "quarantine", unsupported_shape = "block" }), {
+    select = function()
+      error("unsupported request must not call hosted selection")
+    end,
+  })
+
+  assert_equal(422, state.exit_status)
+  assert_equal("context_security_unsupported_request", state.exit_body.code)
+end
+
+local function handler_fails_closed_when_the_hosted_service_is_unavailable()
+  local pdk, state = fake_pdk(raw_request)
+  access.run(pdk, plugin_config({ mode = "quarantine", on_selection_error = "block" }), {
+    select = function()
+      return nil, { class = "transport", message = "timeout" }
+    end,
+  })
+
+  assert_equal(503, state.exit_status)
+  assert_equal("context_security_unavailable", state.exit_body.code)
+  assert_equal(nil, state.upstream_body)
+end
+
 local tests = {
   resolves_the_openai_chat_shape_in_auto_mode,
   refuses_an_explicit_adapter_when_the_shape_does_not_match,
@@ -488,6 +619,10 @@ local tests = {
   never_restores_raw_context_after_unsafe_sanitized_fallback,
   applies_selected_excerpts_without_crossing_message_boundaries,
   applies_selected_excerpts_with_the_resolved_gemini_adapter,
+  handler_rewrites_the_real_upstream_body_using_the_resolved_adapter,
+  handler_blocks_hosted_security_verdicts_before_the_upstream,
+  handler_blocks_unsupported_shapes_when_security_policy_requires_it,
+  handler_fails_closed_when_the_hosted_service_is_unavailable,
 }
 
 for _, test in ipairs(tests) do

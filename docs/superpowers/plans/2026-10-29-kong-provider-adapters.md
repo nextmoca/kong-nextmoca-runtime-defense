@@ -122,10 +122,10 @@
 - Consumes: Kong route configuration and raw HTTP request body.
 - Produces: rewritten upstream body or HTTP 403/422/503 gateway response plus content-free receipt headers.
 
-- [ ] **Step 1: Write failing handler tests** using a Kong PDK double for selected, blocked, unsupported, and service-unavailable outcomes.
-- [ ] **Step 2: Run `make test`** and verify the handler import fails.
-- [ ] **Step 3: Implement `access` phase handling and schema validation**, including exact `request_adapter`, timeout, breaker, and unsupported-shape options.
-- [ ] **Step 4: Run `make test`** and verify the handler tests pass.
+- [x] **Step 1: Write failing handler tests** using a Kong PDK double for selected, blocked, unsupported, and service-unavailable outcomes.
+- [x] **Step 2: Run `make test`** and verify the handler import fails.
+- [x] **Step 3: Implement `access` phase handling and schema validation**, including exact `request_adapter`, timeout, breaker, and unsupported-shape options.
+- [x] **Step 4: Run `make test`** and verify the handler tests pass.
 - [ ] **Step 5: Commit** `feat: add Kong runtime defense handler`.
 
 ### Task 7: Package, OCI, Documentation, And Gateway Smoke Test

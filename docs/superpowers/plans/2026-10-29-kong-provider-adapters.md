@@ -72,10 +72,10 @@
 - Consumes: top-level `system` plus text-safe Anthropic `messages`.
 - Produces: parsed candidates and rewrites preserving tools and provider metadata.
 
-- [ ] **Step 1: Write failing tests** for plain-string messages, text-safe blocks, tool preservation, and mixed non-text block rejection.
-- [ ] **Step 2: Run `make test`** and verify the Anthropic suite fails.
-- [ ] **Step 3: Implement exact text-coordinate extraction and rewrite.**
-- [ ] **Step 4: Run `make test`** and verify all tests pass.
+- [x] **Step 1: Write failing tests** for plain-string messages, text-safe blocks, tool preservation, and mixed non-text block rejection.
+- [x] **Step 2: Run `make test`** and verify the Anthropic suite fails.
+- [x] **Step 3: Implement exact text-coordinate extraction and rewrite.**
+- [x] **Step 4: Run `make test`** and verify all tests pass.
 - [ ] **Step 5: Commit** `feat: support Anthropic Messages adapter`.
 
 ### Task 4: Gemini GenerateContent Adapter

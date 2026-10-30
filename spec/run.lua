@@ -3,6 +3,7 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 local cjson = require("cjson.safe")
 local openai = require("kong.plugins.nextmoca-runtime-defense.adapters.openai_chat")
 local responses = require("kong.plugins.nextmoca-runtime-defense.adapters.openai_responses")
+local anthropic = require("kong.plugins.nextmoca-runtime-defense.adapters.anthropic_messages")
 local registry = require("kong.plugins.nextmoca-runtime-defense.adapters.registry")
 local breaker_module = require("kong.plugins.nextmoca-runtime-defense.breaker")
 local client = require("kong.plugins.nextmoca-runtime-defense.client")
@@ -51,6 +52,20 @@ local raw_responses_request = [[
       {"role": "user", "content": "I previously asked about reservation H7K2."},
       {"type": "function_call", "call_id": "call_abc", "name": "lookup_reservation", "arguments": "{\"code\":\"H7K2\"}"},
       {"type": "function_call_output", "call_id": "call_abc", "output": "Reservation confirmation code is H7K2. Passenger: Ada."},
+      {"role": "user", "content": "What is my reservation confirmation code?"}
+    ]
+  }
+]]
+
+local raw_anthropic_request = [[
+  {
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 1024,
+    "system": "You are a reservation assistant.",
+    "tools": [{"name": "lookup_reservation", "input_schema": {"type": "object"}}],
+    "messages": [
+      {"role": "user", "content": "I previously asked about reservation H7K2."},
+      {"role": "assistant", "content": "I will check the reservation."},
       {"role": "user", "content": "What is my reservation confirmation code?"}
     ]
   }
@@ -183,6 +198,71 @@ local function refuses_responses_non_text_content_without_partial_transformation
   assert_equal("content_blocks_not_supported", parsed.reason)
 end
 
+local function extracts_anthropic_plain_string_messages_and_preserves_controls()
+  local parsed, err = anthropic.parse(raw_anthropic_request)
+
+  assert_equal(nil, err)
+  assert_true(parsed.supported)
+  assert_equal("What is my reservation confirmation code?", parsed.task_prompt)
+  assert_equal("message-1", parsed.records[1].id)
+  assert_equal("conversation", parsed.records[1].source_kind)
+  assert_equal("message-2", parsed.records[2].id)
+  assert_equal("assistant", parsed.records[2].source_kind)
+end
+
+local function rewrites_anthropic_text_blocks_without_changing_system_or_tools()
+  local parsed = assert(anthropic.parse([[{
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 1024,
+    "system": "You are a reservation assistant.",
+    "tools": [{"name": "lookup_reservation", "input_schema": {"type": "object"}}],
+    "messages": [
+      {"role": "user", "content": [{"type": "text", "text": "Reservation H7K2 is in the archive."}]},
+      {"role": "user", "content": "What is my reservation confirmation code?"}
+    ]
+  }]]))
+  local rewritten_raw, err = anthropic.rewrite_selected(parsed, {
+    ["message-1-block-1"] = "Reservation H7K2 is in the archive.",
+  })
+
+  assert_equal(nil, err)
+  local rewritten = assert(cjson.decode(rewritten_raw))
+  assert_equal("Reservation H7K2 is in the archive.", rewritten.messages[1].content[1].text)
+  assert_equal("You are a reservation assistant.", rewritten.system)
+  assert_equal("lookup_reservation", rewritten.tools[1].name)
+end
+
+local function treats_anthropic_tool_result_text_as_eligible_evidence()
+  local parsed, err = anthropic.parse([[{
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 1024,
+    "messages": [
+      {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_1", "content": "Reservation confirmation code is H7K2."}]},
+      {"role": "user", "content": "What is my reservation confirmation code?"}
+    ]
+  }]])
+
+  assert_equal(nil, err)
+  assert_true(parsed.supported)
+  assert_equal("message-1-block-1", parsed.records[1].id)
+  assert_equal("tool", parsed.records[1].source_kind)
+end
+
+local function refuses_anthropic_mixed_non_text_content_without_partial_transformation()
+  local parsed, err = anthropic.parse([[{
+    "model": "claude-sonnet-4-5",
+    "max_tokens": 1024,
+    "messages": [
+      {"role": "assistant", "content": [{"type": "text", "text": "Looking this up."}, {"type": "tool_use", "id": "toolu_1", "name": "lookup_reservation", "input": {}}]},
+      {"role": "user", "content": "What happened?"}
+    ]
+  }]])
+
+  assert_equal(nil, err)
+  assert_equal(false, parsed.supported)
+  assert_equal("content_block_not_supported", parsed.reason)
+end
+
 local function wires_only_the_hosted_selection_contract()
   local parsed = assert(openai.parse(raw_request))
   local request = client.wire_request({
@@ -291,6 +371,10 @@ local tests = {
   extracts_responses_messages_and_function_output_as_candidates,
   preserves_responses_tool_metadata_when_rewriting_selected_candidates,
   refuses_responses_non_text_content_without_partial_transformation,
+  extracts_anthropic_plain_string_messages_and_preserves_controls,
+  rewrites_anthropic_text_blocks_without_changing_system_or_tools,
+  treats_anthropic_tool_result_text_as_eligible_evidence,
+  refuses_anthropic_mixed_non_text_content_without_partial_transformation,
   wires_only_the_hosted_selection_contract,
   rejects_mismatched_hosted_response_ids,
   opens_the_breaker_only_after_configured_transient_failures,

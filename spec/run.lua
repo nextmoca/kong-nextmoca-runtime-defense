@@ -4,6 +4,7 @@ local cjson = require("cjson.safe")
 local openai = require("kong.plugins.nextmoca-runtime-defense.adapters.openai_chat")
 local responses = require("kong.plugins.nextmoca-runtime-defense.adapters.openai_responses")
 local anthropic = require("kong.plugins.nextmoca-runtime-defense.adapters.anthropic_messages")
+local gemini = require("kong.plugins.nextmoca-runtime-defense.adapters.gemini_generate_content")
 local registry = require("kong.plugins.nextmoca-runtime-defense.adapters.registry")
 local breaker_module = require("kong.plugins.nextmoca-runtime-defense.breaker")
 local client = require("kong.plugins.nextmoca-runtime-defense.client")
@@ -68,6 +69,19 @@ local raw_anthropic_request = [[
       {"role": "assistant", "content": "I will check the reservation."},
       {"role": "user", "content": "What is my reservation confirmation code?"}
     ]
+  }
+]]
+
+local raw_gemini_request = [[
+  {
+    "systemInstruction": {"parts": [{"text": "You are a reservation assistant."}]},
+    "contents": [
+      {"role": "user", "parts": [{"text": "I previously asked about reservation H7K2."}]},
+      {"role": "model", "parts": [{"text": "I will check the reservation."}]},
+      {"role": "user", "parts": [{"text": "What is my reservation confirmation code?"}]}
+    ],
+    "tools": [{"functionDeclarations": [{"name": "lookup_reservation"}]}],
+    "generationConfig": {"temperature": 0.2}
   }
 ]]
 
@@ -263,6 +277,59 @@ local function refuses_anthropic_mixed_non_text_content_without_partial_transfor
   assert_equal("content_block_not_supported", parsed.reason)
 end
 
+local function extracts_native_gemini_text_content_and_preserves_controls()
+  local parsed, err = gemini.parse(raw_gemini_request)
+
+  assert_equal(nil, err)
+  assert_true(parsed.supported)
+  assert_equal("What is my reservation confirmation code?", parsed.task_prompt)
+  assert_equal("content-1-part-1", parsed.records[1].id)
+  assert_equal("conversation", parsed.records[1].source_kind)
+  assert_equal("content-2-part-1", parsed.records[2].id)
+  assert_equal("assistant", parsed.records[2].source_kind)
+end
+
+local function rewrites_native_gemini_selected_text_without_changing_system_or_tools()
+  local parsed = assert(gemini.parse(raw_gemini_request))
+  local rewritten_raw, err = gemini.rewrite_selected(parsed, {
+    ["content-1-part-1"] = "Reservation H7K2 is in the archive.",
+  })
+
+  assert_equal(nil, err)
+  local rewritten = assert(cjson.decode(rewritten_raw))
+  assert_equal("Reservation H7K2 is in the archive.", rewritten.contents[1].parts[1].text)
+  assert_equal(omitted, rewritten.contents[2].parts[1].text)
+  assert_equal("What is my reservation confirmation code?", rewritten.contents[3].parts[1].text)
+  assert_equal("You are a reservation assistant.", rewritten.systemInstruction.parts[1].text)
+  assert_equal("lookup_reservation", rewritten.tools[1].functionDeclarations[1].name)
+end
+
+local function refuses_native_gemini_binary_parts_without_partial_transformation()
+  local parsed, err = gemini.parse([[{
+    "contents": [
+      {"role": "user", "parts": [{"inlineData": {"mimeType": "image/png", "data": "..."}}]},
+      {"role": "user", "parts": [{"text": "What happened?"}]}
+    ]
+  }]])
+
+  assert_equal(nil, err)
+  assert_equal(false, parsed.supported)
+  assert_equal("content_part_not_supported", parsed.reason)
+end
+
+local function refuses_native_gemini_function_parts_without_partial_transformation()
+  local parsed, err = gemini.parse([[{
+    "contents": [
+      {"role": "model", "parts": [{"functionCall": {"name": "lookup_reservation", "args": {}}}]},
+      {"role": "user", "parts": [{"text": "What happened?"}]}
+    ]
+  }]])
+
+  assert_equal(nil, err)
+  assert_equal(false, parsed.supported)
+  assert_equal("content_part_not_supported", parsed.reason)
+end
+
 local function wires_only_the_hosted_selection_contract()
   local parsed = assert(openai.parse(raw_request))
   local request = client.wire_request({
@@ -375,6 +442,10 @@ local tests = {
   rewrites_anthropic_text_blocks_without_changing_system_or_tools,
   treats_anthropic_tool_result_text_as_eligible_evidence,
   refuses_anthropic_mixed_non_text_content_without_partial_transformation,
+  extracts_native_gemini_text_content_and_preserves_controls,
+  rewrites_native_gemini_selected_text_without_changing_system_or_tools,
+  refuses_native_gemini_binary_parts_without_partial_transformation,
+  refuses_native_gemini_function_parts_without_partial_transformation,
   wires_only_the_hosted_selection_contract,
   rejects_mismatched_hosted_response_ids,
   opens_the_breaker_only_after_configured_transient_failures,

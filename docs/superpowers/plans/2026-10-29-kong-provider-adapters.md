@@ -88,10 +88,10 @@
 - Consumes: native Gemini `contents` and optional `systemInstruction`.
 - Produces: text-only candidate entries and round-trippable selected rewrites.
 
-- [ ] **Step 1: Write failing tests** for text-only content, system instruction preservation, tool preservation, and binary/function-part rejection.
-- [ ] **Step 2: Run `make test`** and verify Gemini tests fail.
-- [ ] **Step 3: Implement Gemini parse and rewrite behavior.**
-- [ ] **Step 4: Run `make test`** and verify all tests pass.
+- [x] **Step 1: Write failing tests** for text-only content, system instruction preservation, tool preservation, and binary/function-part rejection.
+- [x] **Step 2: Run `make test`** and verify Gemini tests fail.
+- [x] **Step 3: Implement Gemini parse and rewrite behavior.**
+- [x] **Step 4: Run `make test`** and verify all tests pass.
 - [ ] **Step 5: Commit** `feat: support native Gemini request adapter`.
 
 ### Task 5: Generic Hosted Client And Delivery Policy

@@ -13,7 +13,7 @@ services:
       - name: nextmoca-runtime-defense
         config:
           endpoint: http://selector:8080
-          operating_point: np-2026-10-r7
+          operating_point: np-2026-10-r8
           mode: active
           request_adapter: auto
           unsupported_shape: pass

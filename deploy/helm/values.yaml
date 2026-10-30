@@ -1,0 +1,53 @@
+# Values for the official Kong Helm chart (`kong/kong`) in DB-less mode.
+# Create the referenced Secret before installing this example. Do not place a
+# Next Moca API key in this file, a declarative Kong config, or source control.
+
+image:
+  repository: ghcr.io/nextmoca/kong-nextmoca-runtime-defense
+  tag: "0.1.1"
+  pullPolicy: IfNotPresent
+
+env:
+  database: "off"
+  plugins: "bundled,nextmoca-runtime-defense"
+  nginx_main_env: NEXTMOCA_API_KEY
+
+customEnv:
+  NEXTMOCA_API_KEY:
+    valueFrom:
+      secretKeyRef:
+        name: nextmoca-runtime-defense
+        key: NEXTMOCA_API_KEY
+
+ingressController:
+  enabled: false
+
+dblessConfig:
+  config: |
+    _format_version: "3.0"
+    _transform: true
+    services:
+      - name: llm-provider
+        # Replace with the LLM provider endpoint routed through this Gateway.
+        url: https://api.openai.com
+        routes:
+          - name: llm-provider-route
+            paths:
+              - /openai
+            strip_path: true
+        plugins:
+          - name: nextmoca-runtime-defense
+            config:
+              endpoint: https://api.nextmoca.com
+              api_key_env: NEXTMOCA_API_KEY
+              operating_point: np-2026-10-r8
+              mode: shadow
+              request_adapter: auto
+              unsupported_shape: pass
+              on_selection_error: pass
+              max_context_tokens: 8192
+              capacity_tokens: 128000
+              autochunk: true
+              timeout_ms: 3000
+              breaker_failures: 3
+              breaker_cooldown_ms: 30000

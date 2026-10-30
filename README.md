@@ -18,7 +18,7 @@ The repository contains no Next Moca selection, scanning, quarantine, or policy 
 ## Install
 
 ```sh
-docker pull ghcr.io/nextmoca/kong-nextmoca-runtime-defense:0.1.0
+docker pull ghcr.io/nextmoca/kong-nextmoca-runtime-defense:0.1.1
 ```
 
 Use the image as the base image for your Kong Gateway deployment, then enable the plugin:
@@ -29,7 +29,7 @@ plugins:
     config:
       endpoint: https://api.nextmoca.com
       api_key_env: NEXTMOCA_API_KEY
-      operating_point: np-2026-10-r7
+      operating_point: np-2026-10-r8
       mode: quarantine
       request_adapter: auto
       unsupported_shape: block
@@ -66,6 +66,15 @@ When a selected rewrite is delivered, the plugin returns content-free receipt he
 
 The plugin governs the final request that Kong sees. It can protect tool output, retrieved context, memory, and conversation history only when the application includes that material in the next LLM request routed through Kong. It does not inspect tool execution, data stores, or provider responses.
 
+## Deployment And Operations
+
+- [Deployment](docs/DEPLOYMENT.md): DB-less Kong, Helm, Kubernetes Secret,
+  rollout sequence, and container configuration.
+- [Operations](docs/OPERATIONS.md): receipt headers, delivery outcomes,
+  circuit-breaker behavior, and alerting guidance.
+- [Compatibility](docs/COMPATIBILITY.md): the release-tested request and
+  deployment boundary.
+
 ## Test
 
 ```sh
@@ -75,6 +84,18 @@ make smoke
 ```
 
 `make smoke` launches a local Kong Gateway, a fake hosted Select endpoint, and an echo upstream. It verifies the full gateway path for OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, and native Gemini GenerateContent: selected text reaches the upstream, omitted candidates do not, and the response carries the correct adapter receipt headers. It does not call an external model or the production Next Moca API.
+
+To exercise the real hosted `quarantine` and `enforce` delivery paths against
+disposable local Kong and echo-upstream containers, run:
+
+```sh
+NEXTMOCA_API_KEY=your_non_production_key make live-security-smoke
+```
+
+The live smoke test sends deterministic malicious tool-result fixtures to the
+hosted Next Moca R8 API. It asserts that the local upstream never receives the
+attack text. It does not call an LLM, persist the API key, or publish request
+bodies.
 
 ## License
 

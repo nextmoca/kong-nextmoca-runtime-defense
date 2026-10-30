@@ -12,14 +12,14 @@ local candidate_roles = {
 }
 
 local source_kinds = {
-  user = "conversation",
-  assistant = "assistant",
+  user = "user",
+  assistant = "unknown",
   tool = "tool",
 }
 
 local record_kinds = {
-  user = "conversation_history",
-  assistant = "assistant_message",
+  user = "user_input",
+  assistant = "llm_response",
   tool = "tool_result",
 }
 

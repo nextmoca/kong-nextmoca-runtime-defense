@@ -12,9 +12,9 @@ end
 local function message_record(index, item)
   return {
     id = "input-" .. index,
-    kind = item.role == "assistant" and "assistant_message" or "conversation_history",
+    kind = item.role == "assistant" and "llm_response" or "user_input",
     source = "openai.input[" .. index .. "]",
-    source_kind = item.role == "assistant" and "assistant" or "conversation",
+    source_kind = item.role == "assistant" and "unknown" or "user",
     text = item.content,
     input_index = index,
     field = "content",

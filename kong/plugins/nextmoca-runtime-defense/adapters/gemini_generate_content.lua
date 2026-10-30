@@ -37,9 +37,9 @@ local function records_for_content(content_index, content)
     end
     records[#records + 1] = {
       id = "content-" .. content_index .. "-part-" .. part_index,
-      kind = content.role == "model" and "assistant_message" or "conversation_history",
+      kind = content.role == "model" and "llm_response" or "user_input",
       source = "gemini.contents[" .. content_index .. "].parts[" .. part_index .. "]",
-      source_kind = content.role == "model" and "assistant" or "conversation",
+      source_kind = content.role == "model" and "unknown" or "user",
       text = part.text,
       content_index = content_index,
       part_index = part_index,

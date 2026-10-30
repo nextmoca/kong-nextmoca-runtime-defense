@@ -10,13 +10,13 @@ local function unsupported(reason)
 end
 
 local function message_source_kind(role)
-  return role == "assistant" and "assistant" or "conversation"
+  return role == "assistant" and "unknown" or "user"
 end
 
 local function message_record(message_index, message)
   return {
     id = "message-" .. message_index,
-    kind = message.role == "assistant" and "assistant_message" or "conversation_history",
+    kind = message.role == "assistant" and "llm_response" or "user_input",
     source = "anthropic.messages[" .. message_index .. "]",
     source_kind = message_source_kind(message.role),
     text = message.content,
@@ -29,7 +29,7 @@ local function block_record(message_index, block_index, block, role)
   local is_tool = block.type == "tool_result"
   return {
     id = "message-" .. message_index .. "-block-" .. block_index,
-    kind = is_tool and "tool_result" or (role == "assistant" and "assistant_message" or "conversation_history"),
+    kind = is_tool and "tool_result" or (role == "assistant" and "llm_response" or "user_input"),
     source = "anthropic.messages[" .. message_index .. "].content[" .. block_index .. "]",
     source_kind = is_tool and "tool" or message_source_kind(role),
     text = is_tool and block.content or block.text,

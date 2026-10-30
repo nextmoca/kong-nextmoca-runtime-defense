@@ -18,7 +18,7 @@ The repository contains no Next Moca selection, scanning, quarantine, or policy 
 ## Install
 
 ```sh
-docker pull ghcr.io/nextmoca/kong-runtime-defense:0.1.0
+docker pull ghcr.io/nextmoca/kong-nextmoca-runtime-defense:0.1.0
 ```
 
 Use the image as the base image for your Kong Gateway deployment, then enable the plugin:

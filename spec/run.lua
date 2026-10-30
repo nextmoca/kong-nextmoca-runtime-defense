@@ -352,6 +352,25 @@ local function wires_only_the_hosted_selection_contract()
   assert_equal("tool", request.records[3].source_kind)
 end
 
+local function wires_an_adapter_neutral_hosted_contract_for_gemini()
+  local parsed = assert(gemini.parse(raw_gemini_request))
+  local request = client.wire_request({
+    endpoint = "https://api.nextmoca.com",
+    operating_point = "np-2026-10-r7",
+    max_context_tokens = 8192,
+    capacity_tokens = 128000,
+    autochunk = true,
+    mode = "quarantine",
+  }, parsed, "request-gemini")
+
+  assert_equal("request-gemini", request.request_id)
+  assert_equal("What is my reservation confirmation code?", request.task.prompt)
+  assert_equal("content-1-part-1", request.records[1].id)
+  assert_equal("conversation", request.records[1].source_kind)
+  assert_equal("content-2-part-1", request.records[2].id)
+  assert_equal("assistant", request.records[2].source_kind)
+end
+
 local function rejects_mismatched_hosted_response_ids()
   local response, err = client.decode_response(200, {}, [[{
     "request_id": "another-request",
@@ -427,6 +446,21 @@ local function applies_selected_excerpts_without_crossing_message_boundaries()
   assert_equal("What is my reservation confirmation code?", rewritten.messages[6].content)
 end
 
+local function applies_selected_excerpts_with_the_resolved_gemini_adapter()
+  local parsed = assert(gemini.parse(raw_gemini_request))
+  local decision = policy.decide({ mode = "active", on_selection_error = "pass" }, raw_gemini_request, parsed, {
+    outcome = "selected",
+    fallback_used = false,
+    selected = {{ record_id = "content-1-part-1", excerpt = "Reservation H7K2 is in the archive." }},
+  })
+
+  assert_equal("transform", decision.kind)
+  local rewritten = assert(cjson.decode(decision.body))
+  assert_equal("Reservation H7K2 is in the archive.", rewritten.contents[1].parts[1].text)
+  assert_equal(omitted, rewritten.contents[2].parts[1].text)
+  assert_equal("What is my reservation confirmation code?", rewritten.contents[3].parts[1].text)
+end
+
 local tests = {
   resolves_the_openai_chat_shape_in_auto_mode,
   refuses_an_explicit_adapter_when_the_shape_does_not_match,
@@ -447,11 +481,13 @@ local tests = {
   refuses_native_gemini_binary_parts_without_partial_transformation,
   refuses_native_gemini_function_parts_without_partial_transformation,
   wires_only_the_hosted_selection_contract,
+  wires_an_adapter_neutral_hosted_contract_for_gemini,
   rejects_mismatched_hosted_response_ids,
   opens_the_breaker_only_after_configured_transient_failures,
   blocks_enforced_hosted_security_verdicts_before_upstream,
   never_restores_raw_context_after_unsafe_sanitized_fallback,
   applies_selected_excerpts_without_crossing_message_boundaries,
+  applies_selected_excerpts_with_the_resolved_gemini_adapter,
 }
 
 for _, test in ipairs(tests) do

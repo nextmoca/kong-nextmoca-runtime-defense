@@ -1,5 +1,3 @@
-local openai = require("kong.plugins.nextmoca-runtime-defense.openai")
-
 local Policy = {}
 
 local function pass(body, reason)
@@ -12,6 +10,15 @@ end
 
 local function screens(mode)
   return mode == "quarantine" or mode == "enforce"
+end
+
+local function delivery_adapter(parsed)
+  if type(parsed) ~= "table" or type(parsed.adapter) ~= "table"
+    or type(parsed.adapter.rewrite_selected) ~= "function"
+    or type(parsed.adapter.rewrite_single_candidate) ~= "function" then
+    return nil
+  end
+  return parsed.adapter
 end
 
 local function selected(original, parsed, response)
@@ -33,7 +40,11 @@ local function selected(original, parsed, response)
     return pass(original, "selection_has_no_matching_candidate")
   end
 
-  local rewritten, rewrite_err = openai.rewrite_selected(parsed, excerpts)
+  local adapter = delivery_adapter(parsed)
+  if not adapter then
+    return pass(original, "selection_adapter_not_resolved")
+  end
+  local rewritten, rewrite_err = adapter.rewrite_selected(parsed, excerpts)
   if not rewritten then
     return pass(original, "selection_rewrite_failed:" .. tostring(rewrite_err))
   end
@@ -48,7 +59,11 @@ local function sanitized_fallback(mode, original, parsed, response)
     return block("empty_sanitized_fallback", "verdict")
   end
 
-  local rewritten, rewrite_err = openai.rewrite_single_candidate(parsed, response.rendered_context)
+  local adapter = delivery_adapter(parsed)
+  if not adapter then
+    return block("sanitized_fallback_adapter_not_resolved", "verdict")
+  end
+  local rewritten, rewrite_err = adapter.rewrite_single_candidate(parsed, response.rendered_context)
   if not rewritten then
     return block(rewrite_err, "verdict")
   end

@@ -105,10 +105,10 @@
 - Consumes: any parsed adapter packet.
 - Produces: hosted Select payloads and provider-safe gateway decisions.
 
-- [ ] **Step 1: Write failing tests** for client payloads from every adapter and policy’s adapter-specific selected rewrite.
-- [ ] **Step 2: Run `make test`** and verify generic policy tests fail.
-- [ ] **Step 3: Remove OpenAI-specific coupling** by carrying the resolved adapter in parsed packets.
-- [ ] **Step 4: Run `make test`** and verify all adapter delivery tests pass.
+- [x] **Step 1: Write failing tests** for client payloads from every adapter and policy’s adapter-specific selected rewrite.
+- [x] **Step 2: Run `make test`** and verify generic policy tests fail.
+- [x] **Step 3: Remove OpenAI-specific coupling** by carrying the resolved adapter in parsed packets.
+- [x] **Step 4: Run `make test`** and verify all adapter delivery tests pass.
 - [ ] **Step 5: Commit** `refactor: make Kong delivery policy adapter-neutral`.
 
 ### Task 6: Kong Plugin Handler And Schema

@@ -51,6 +51,8 @@ environment:
 
 ## Delivery Modes
 
+The plugin defaults to `shadow`, so enabling it does not change provider-bound requests until a delivery mode is chosen deliberately.
+
 | Mode | Hosted behavior | Gateway delivery behavior |
 |---|---|---|
 | `shadow` | Audit only | Original request is forwarded unchanged |

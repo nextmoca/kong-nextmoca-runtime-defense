@@ -10,6 +10,8 @@ local breaker_module = require("kong.plugins.nextmoca-runtime-defense.breaker")
 local client = require("kong.plugins.nextmoca-runtime-defense.client")
 local policy = require("kong.plugins.nextmoca-runtime-defense.policy")
 local access = require("kong.plugins.nextmoca-runtime-defense.access")
+local handler = require("kong.plugins.nextmoca-runtime-defense.handler")
+local schema = require("kong.plugins.nextmoca-runtime-defense.schema")
 
 local omitted = "[Next Moca omitted nonessential context for this request.]"
 
@@ -148,6 +150,17 @@ local function resolves_the_openai_chat_shape_in_auto_mode()
 
   assert_equal(nil, err)
   assert_equal("openai_chat", adapter_name)
+end
+
+local function defaults_to_shadow_delivery()
+  local fields = schema.fields[1].config.fields
+  for _, field in ipairs(fields) do
+    if field.mode then
+      assert_equal("shadow", field.mode.default)
+      return
+    end
+  end
+  error("mode field missing from schema")
 end
 
 local function refuses_an_explicit_adapter_when_the_shape_does_not_match()
@@ -592,7 +605,38 @@ local function handler_fails_closed_when_the_hosted_service_is_unavailable()
   assert_equal(nil, state.upstream_body)
 end
 
+local function handler_reuses_the_client_so_the_circuit_breaker_has_state()
+  local runtime_config = assert(access.runtime_config(plugin_config({
+    api_key = "test-key",
+    operating_point = "np-2026-10-r7",
+  })))
+  local created_clients = 0
+
+  handler._clients = nil
+  local function create_client()
+    created_clients = created_clients + 1
+    return {
+      select = function()
+        return {
+          outcome = "fallback",
+          fallback_used = true,
+          rendered_context = "",
+          selected = {},
+        }, nil
+      end,
+    }
+  end
+
+  local first = handler:client_for(runtime_config, create_client)
+  local second = handler:client_for(runtime_config, create_client)
+
+  handler._clients = nil
+  assert_true(first == second)
+  assert_equal(1, created_clients)
+end
+
 local tests = {
+  defaults_to_shadow_delivery,
   resolves_the_openai_chat_shape_in_auto_mode,
   refuses_an_explicit_adapter_when_the_shape_does_not_match,
   refuses_ambiguous_provider_shapes,
@@ -623,6 +667,7 @@ local tests = {
   handler_blocks_hosted_security_verdicts_before_the_upstream,
   handler_blocks_unsupported_shapes_when_security_policy_requires_it,
   handler_fails_closed_when_the_hosted_service_is_unavailable,
+  handler_reuses_the_client_so_the_circuit_breaker_has_state,
 }
 
 for _, test in ipairs(tests) do

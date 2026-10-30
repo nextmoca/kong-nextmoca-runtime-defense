@@ -8,7 +8,7 @@ return {
           { endpoint = { type = "string", default = "https://api.nextmoca.com" } },
           { api_key_env = { type = "string", default = "NEXTMOCA_API_KEY" } },
           { operating_point = { type = "string", default = "np-2026-10-r7" } },
-          { mode = { type = "string", default = "active", one_of = { "shadow", "active", "quarantine", "enforce" } } },
+          { mode = { type = "string", default = "shadow", one_of = { "shadow", "active", "quarantine", "enforce" } } },
           { request_adapter = { type = "string", default = "auto", one_of = { "auto", "openai_chat", "openai_responses", "anthropic_messages", "gemini_generate_content" } } },
           { unsupported_shape = { type = "string", default = "pass", one_of = { "pass", "block" } } },
           { on_selection_error = { type = "string", default = "pass", one_of = { "pass", "block" } } },
